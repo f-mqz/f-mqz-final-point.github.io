@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Survivor - HP Edition</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0a0a0c;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+        }
+        #score {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(0,255,255,0.5);
+        }
+        /* Barre de Vie */
+        #hp-container {
+            width: 150px;
+            height: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid #fff;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #hp-bar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff0055, #ff5588);
+            transition: width 0.3s ease;
+        }
+        #restart {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 40px;
+            background: #00d2ff;
+            border: none;
+            border-radius: 30px;
+            font-size: 20px;
+            font-weight: bold;
+            display: none;
+            pointer-events: auto;
+            box-shadow: 0 0 20px #00d2ff;
+        }
+        /* Effet de dégâts */
+        #damage-flash {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 0, 0, 0.3);
+            pointer-events: none;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="damage-flash"></div>
+
+    <div id="ui">
+        <div id="score">Score: 0</div>
+        <div id="hp-container">
+            <div id="hp-bar"></div>
+        </div>
+    </div>
+
+    <button id="restart" onclick="resetGame()">REESSAYER</button>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreElement = document.getElementById('score');
+    const hpBar = document.getElementById('hp-bar');
+    const restartBtn = document.getElementById('restart');
+    const damageFlash = document.getElementById('damage-flash');
+
+    let score = 0;
+    let hp = 5;
+    const maxHp = 5;
+    let gameActive = true;
+    let enemies = [];
+    let bullets = [];
+    
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    const player = {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: 22,
+        color: '#00d2ff'
+    };
+
+    class Bullet {
+        constructor(x, y, targetX, targetY) {
+            this.x = x;
+            this.y = y;
+            this.radius = 5;
+            const angle = Math.atan2(targetY - y, targetX - x);
+            this.velocity = { x: Math.cos(angle) * 12, y: Math.sin(angle) * 12 };
+        }
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = "white";
+            ctx.fill();
+        }
+        update() {
+            this.x += this.velocity.x;
+            this.y += this.velocity.y;
+        }
+    }
+
+    class Enemy {
+        constructor() {
+            this.radius = Math.random() * (25 - 12) + 12;
+            if (Math.random() < 0.5) {
+                this.x = Math.random() < 0.5 ? -this.radius : canvas.width + this.radius;
+                this.y = Math.random() * canvas.height;
+            } else {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() < 0.5 ? -this.radius : canvas.height + this.radius;
+            }
+            const angle = Math.atan2(player.y - this.y, player.x - this.x);
+            this.speed = 1.8 + (score / 200);
+            this.velocity = { x: Math.cos(angle) * this.speed, y: Math.sin(angle) * this.speed };
+        }
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff0055';
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#ff0055';
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+        update() {
+            this.x += this.velocity.x;
+            this.y += this.velocity.y;
+        }
+    }
+
+    function triggerDamageEffect() {
+        damageFlash.style.display = 'block';
+        setTimeout(() => { damageFlash.style.display = 'none'; }, 100);
+    }
+
+    function spawnEnemy() {
+        if (gameActive) {
+            enemies.push(new Enemy());
+            let nextSpawn = Math.max(250, 1000 - score * 3);
+            setTimeout(spawnEnemy, nextSpawn);
+        }
+    }
+
+    function animate() {
+        if (!gameActive) return;
+        requestAnimationFrame(animate);
+        ctx.fillStyle = 'rgba(10, 10, 12, 0.3)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Joueur
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+        ctx.fillStyle = player.color;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = player.color;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        bullets.forEach((bullet, bIndex) => {
+            bullet.update();
+            bullet.draw();
+            if (bullet.x < -50 || bullet.x > canvas.width + 50 || bullet.y < -50 || bullet.y > canvas.height + 50) {
+                bullets.splice(bIndex, 1);
+            }
+        });
+
+        enemies.forEach((enemy, eIndex) => {
+            enemy.update();
+            enemy.draw();
+
+            // Collision Joueur (Prendre un dégât)
+            const dist = Math.hypot(player.x - enemy.x, player.y - enemy.y);
+            if (dist - enemy.radius - player.radius < 1) {
+                enemies.splice(eIndex, 1); // L'ennemi explose sur nous
+                hp--;
+                hpBar.style.width = (hp / maxHp * 100) + "%";
+                triggerDamageEffect();
+                
+                if (hp <= 0) gameOver();
+            }
+
+            // Collision Balles
+            bullets.forEach((bullet, bIndex) => {
+                const bDist = Math.hypot(bullet.x - enemy.x, bullet.y - enemy.y);
+                if (bDist - enemy.radius - bullet.radius < 1) {
+                    score += 10;
+                    scoreElement.innerText = `Score: ${score}`;
+                    enemies.splice(eIndex, 1);
+                    bullets.splice(bIndex, 1);
+                }
+            });
+        });
+    }
+
+    window.addEventListener('touchstart', (e) => {
+        if (!gameActive) return;
+        const touch = e.touches[0];
+        bullets.push(new Bullet(player.x, player.y, touch.clientX, touch.clientY));
+    });
+
+    function gameOver() {
+        gameActive = false;
+        restartBtn.style.display = 'block';
+    }
+
+    function resetGame() {
+        score = 0;
+        hp = 5;
+        enemies = [];
+        bullets = [];
+        gameActive = true;
+        scoreElement.innerText = `Score: 0`;
+        hpBar.style.width = "100%";
+        restartBtn.style.display = 'none';
+        animate();
+        spawnEnemy();
+    }
+
+    spawnEnemy();
+    animate();
+</script>
+</body>
+</html>
